@@ -1,0 +1,144 @@
+#!/usr/bin/python
+
+######################################################################
+#
+# Simple tool to print various stats calculated from your Internode
+# usage.
+#
+# To use this you need to create the file ~/.inoderc; this 
+# should contain the section [inode] and username and password 
+# definition; e.g:
+#
+#     [inode]
+#     username = myusername@internode.on.net
+#     password = XXXXX
+#
+
+import os, re, sys, time, optparse, urllib, logging
+from ConfigParser import ConfigParser
+
+CONFFILE = os.path.expanduser('~/.inoderc')
+TOOLURL = "https://customer-webtools-api.internode.on.net/cgi-bin/padsl-usage"
+
+def parseopts():
+    oparse = optparse.OptionParser()
+    
+    oparse.add_option("-v", "--verbose", action="store_true",
+                      help="Verbose messages", default=False)
+    oparse.add_option("-d", "--debug", action="store_true",
+                      help="Enable debug output", default=False)
+
+    opts, rest = oparse.parse_args()
+
+    return opts
+
+
+def loadconfig():
+    config = ConfigParser()    
+    if not os.path.exists(CONFFILE):
+        print "No config file defined.  See script header for details"
+        sys.exit(-1)
+
+    config.read(CONFFILE)
+    uname = config.get('inode','username')
+    passwd = config.get('inode','password')
+    return (uname, passwd)
+
+
+def mlen(m, y):
+    if m == 0: m = 12
+    if m == 2:
+        if ((y % 100 and not (y % 4)) or not (y % 400)):
+            return 29
+        else:
+            return 28
+    else:
+        return (31, 0, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)[m-1]
+
+
+def fetchusage(uname, passwd):
+    params = urllib.urlencode({'username': uname,
+                               'password': passwd,
+                               "update" : "1"})
+    try:
+        fd = urllib.urlopen(TOOLURL, params)
+        data = fd.read()
+    except IOError, e:
+        print "Call to webtools failed: "+e
+        sys.exit()
+
+    logging.debug("Webtool returned: "+data)
+
+    # The returned format is: Used Quota Period-end, Excess-charge
+    # Example: 14489.851376 15000 22/6/2005 0
+    ure = re.compile("^(?P<used>\d+\.\d+)"+
+                     " (?P<max>\d+)"+
+                     " (?P<day>\d+)/(?P<month>\d+)/(?P<year>\d+)"+
+                     " (?P<charge>[\d\.]+)")
+
+    match = ure.search(data)
+    if not match:
+        if re.compile("Authentication failed").search(data):
+            print "Bad password"
+        else:
+            print "Unknown Error:", data
+        sys.exit()
+    
+    usage = match.groupdict()
+    logging.debug("Parsed usage: "+str(usage))
+
+    # String->Num conversions
+    for i in ['day', 'month', 'year']:
+        usage[i] = int(usage[i])
+
+    for i in ['used', 'max', 'charge']:
+        usage[i] = float(usage[i])        
+
+    return usage
+
+
+if __name__ == '__main__':
+    opts = parseopts()
+
+    if opts.debug:
+        logging.root.setLevel(logging.DEBUG)
+    elif opts.verbose:
+        logging.root.setLevel(logging.INFO)
+
+    (uname, passwd) = loadconfig()
+
+    usage = fetchusage(uname, passwd)
+
+    nyear, nmonth, nday, nhour, nmin  = time.localtime()[0:5]
+
+    if usage['month'] == nmonth:
+        dip = mlen(nmonth-1, nyear)
+        daysleft = usage['day'] - nday
+        daysdone = dip - usage['day'] + nday
+    else:
+        dip = mlen(nmonth, nyear)
+        daysleft = dip - nday + usage['day']
+        daysdone = nday - usage['day']
+
+    perday = usage['max'] / dip
+    pcd = float(daysdone) / (daysdone + daysleft) * 100.0
+    pcu = usage['used'] / usage['max'] * 100.0
+    mleft = usage['max'] - usage['used']
+    mopt = usage['max'] / dip * daysdone
+    moptdiff = usage['used'] - mopt
+    leftquota = mleft / float(daysleft)
+
+    dayopt = mopt + ((perday / (24*60)) * ((nhour*60)+nmin))
+    moptdiff = usage['used'] - dayopt
+    moptstr = "over"
+    if moptdiff < 0:
+        moptstr = "under"
+        moptdiff = -moptdiff
+
+    print "Completed %d days of %d, %d left (%.1f%% done)" % (daysdone, daysdone+daysleft, daysleft, pcd)
+    print "Used %.2f of %sMB (%.1f%%).  Daily quota is %.1fMB." % (usage['used'], usage['max'], pcu, perday)
+    #print "Optimal would be %.2f." % (mopt)
+    print "%.2fMB left for %d days" % (mleft, daysleft)
+    print "Optimal this minute would be %.0f (actual %.0f)." % (dayopt, usage['used'])
+    print "Daily quota for remainder is %.0fMB." % leftquota
+    print "You are %.2fMB %s quota." % (moptdiff, moptstr)
