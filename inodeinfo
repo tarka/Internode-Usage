@@ -97,18 +97,7 @@ def fetchusage(uname, passwd):
     return usage
 
 
-if __name__ == '__main__':
-    opts = parseopts()
-
-    if opts.debug:
-        logging.root.setLevel(logging.DEBUG)
-    elif opts.verbose:
-        logging.root.setLevel(logging.INFO)
-
-    (uname, passwd) = loadconfig()
-
-    usage = fetchusage(uname, passwd)
-
+def calcstats(usage):
     nyear, nmonth, nday, nhour, nmin  = time.localtime()[0:5]
 
     if usage['month'] == nmonth:
@@ -135,10 +124,49 @@ if __name__ == '__main__':
         moptstr = "under"
         moptdiff = -moptdiff
 
-    print "Completed %d days of %d, %d left (%.1f%% done)" % (daysdone, daysdone+daysleft, daysleft, pcd)
-    print "Used %.2f of %sMB (%.1f%%).  Daily quota is %.1fMB." % (usage['used'], usage['max'], pcu, perday)
+    stats = {'perday':perday,
+             'daysdone':daysdone,
+             'daysleft':daysleft,
+             'pcd':pcd,
+             'pcu':pcu,
+             'mleft':mleft,
+             'mopt':mopt,
+             'moptdiff':moptdiff,
+             'leftquota':leftquota,
+             'dayopt':dayopt,
+             'moptdiff':moptdiff,
+             'moptstr':moptstr}
+    return stats
+
+
+def printstats(usage, stats):
+    print "Completed %d days of %d, %d left (%.1f%% done)" \
+        % (stats['daysdone'], stats['daysdone']+stats['daysleft'], 
+           stats['daysleft'], stats['pcd'])
+    print "Used %.2f of %sMB (%.1f%%).  Daily quota is %.1fMB." \
+        % (usage['used'], usage['max'], stats['pcu'], stats['perday'])
     #print "Optimal would be %.2f." % (mopt)
-    print "%.2fMB left for %d days" % (mleft, daysleft)
-    print "Optimal this minute would be %.0f (actual %.0f)." % (dayopt, usage['used'])
-    print "Daily quota for remainder is %.0fMB." % leftquota
-    print "You are %.2fMB %s quota." % (moptdiff, moptstr)
+    print "%.2fMB left for %d days" \
+        % (stats['mleft'], stats['daysleft'])
+    print "Optimal this minute would be %.0f (actual %.0f)." \
+        % (stats['dayopt'], usage['used'])
+    print "Daily quota for remainder is %.0fMB." \
+        % stats['leftquota']
+    print "You are %.2fMB %s quota." \
+        % (stats['moptdiff'], stats['moptstr'])
+
+
+if __name__ == '__main__':
+    opts = parseopts()
+
+    if opts.debug:
+        logging.root.setLevel(logging.DEBUG)
+    elif opts.verbose:
+        logging.root.setLevel(logging.INFO)
+
+    (uname, passwd) = loadconfig()
+
+    usage = fetchusage(uname, passwd)
+    stats = calcstats(usage)
+
+    printstats(usage, stats)
