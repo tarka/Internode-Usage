@@ -64,7 +64,7 @@ def fetchusage(uname, passwd):
         fd = urllib.urlopen(TOOLURL, params)
         data = fd.read()
     except IOError, e:
-        print "Call to webtools failed: "+e
+        print "Call to webtools failed: %s" % e
         sys.exit()
 
     logging.debug("Webtool returned: "+data)
