@@ -139,6 +139,11 @@ def calcstats(usage):
     return stats
 
 
+BLACK, RED, GREEN, YELLOW, BLUE, MAGENTA, CYAN, WHITE = [i+30 for i in range(8)]
+RESET_SEQ = "\033[0m"
+COLOR_SEQ = "\033[1;%dm"
+BOLD_SEQ = "\033[1m"
+
 def printstats(usage, stats):
     print "Completed %d days of %d, %d left (%.1f%% done)" \
         % (stats['daysdone'], stats['daysdone']+stats['daysleft'], 
@@ -152,9 +157,12 @@ def printstats(usage, stats):
         % (stats['dayopt'], usage['used'])
     print "Daily quota for remainder is %.0fMB." \
         % stats['leftquota']
-    print "You are %.2fMB %s quota." \
-        % (stats['moptdiff'], stats['moptstr'])
-
+    if (stats['moptstr'] == 'under'):
+        color = COLOR_SEQ % GREEN
+    else:
+        color = COLOR_SEQ % RED
+    print "You are %.2fMB %s%s%s quota." \
+        % (stats['moptdiff'], color, stats['moptstr'], RESET_SEQ)
 
 if __name__ == '__main__':
     opts = parseopts()
