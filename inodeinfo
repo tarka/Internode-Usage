@@ -14,11 +14,15 @@
 #     password = XXXXX
 #
 
-import os, re, sys, time, optparse, urllib, logging
+import os, re, sys, time, optparse, logging, urllib
 from ConfigParser import ConfigParser
+from urllib import FancyURLopener
+from xml.etree import ElementTree
+
 
 CONFFILE = os.path.expanduser('~/.inoderc')
-TOOLURL = "https://customer-webtools-api.internode.on.net/cgi-bin/padsl-usage"
+TOOLURL = "https://customer-webtools-api.internode.on.net/api/v1.5/"
+
 
 def parseopts():
     oparse = optparse.OptionParser()
@@ -54,47 +58,6 @@ def mlen(m, y):
             return 28
     else:
         return (31, 0, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)[m-1]
-
-
-def fetchusage(uname, passwd):
-    params = urllib.urlencode({'username': uname,
-                               'password': passwd,
-                               "update" : "1"})
-    try:
-        fd = urllib.urlopen(TOOLURL, params)
-        data = fd.read()
-    except IOError, e:
-        print "Call to webtools failed: %s" % e
-        sys.exit()
-
-    logging.debug("Webtool returned: "+data)
-
-    # The returned format is: Used Quota Period-end, Excess-charge
-    # Example: 14489.851376 15000 22/6/2005 0
-    ure = re.compile("^(?P<used>\d+\.\d+)"+
-                     " (?P<max>\d+)"+
-                     " (?P<day>\d+)/(?P<month>\d+)/(?P<year>\d+)"+
-                     " (?P<charge>[\d\.]+)")
-
-    match = ure.search(data)
-    if not match:
-        if re.compile("Authentication failed").search(data):
-            print "Bad password"
-        else:
-            print "Unknown Error:", data
-        sys.exit()
-    
-    usage = match.groupdict()
-    logging.debug("Parsed usage: "+str(usage))
-
-    # String->Num conversions
-    for i in ['day', 'month', 'year']:
-        usage[i] = int(usage[i])
-
-    for i in ['used', 'max', 'charge']:
-        usage[i] = float(usage[i])        
-
-    return usage
 
 
 def calcstats(usage):
@@ -139,6 +102,60 @@ def calcstats(usage):
     return stats
 
 
+class InodeURLOpener(FancyURLopener):
+    def __init__(self, uname, passwd):
+        FancyURLopener.__init__(self)
+        self.uname = uname
+        self.passwd = passwd
+
+    def prompt_user_passwd(self, host, realm):
+        return (self.uname, self.passwd)
+
+
+def fetchusage(uname, passwd):
+    url = InodeURLOpener(uname, passwd)
+
+    # Get service#
+    logging.info("Fetching service list")
+    fd = url.open(TOOLURL)
+    et = ElementTree.parse(fd)
+    logging.debug(ElementTree.tostring(et.getroot()))
+    svcs = {}
+    for e in et.findall("//service"):
+        svcs[e.attrib['type']] = e.text
+    logging.info("Got %d services"%len(svcs))
+    if len(svcs) <= 0:
+        raise Exception("No services found")
+
+    # Get usage
+    for svc in svcs.keys():
+        logging.info("Fetching usage for %s"%svc)
+        fd = url.open(TOOLURL+"/"+svcs[svc]+"/usage")
+        et = ElementTree.parse(fd)
+        logging.debug(ElementTree.tostring(et.getroot()))
+
+        # Current version of elementtree doesn't support attributes
+        traffics = et.findall("//traffic")
+        for t in traffics:
+            if t.attrib['name'] == 'total':
+                traffic = t
+
+        # Extract and convert
+        ro = [int(i) for i in traffic.attrib['rollover'].split('-')]
+        usage = {
+            'year':ro[1],
+            'month':ro[1],
+            'day':ro[2],
+            'max':float(traffic.attrib['quota'])/1000000,
+            'used':float(traffic.text)/1000000
+        }
+        logging.debug(usage)
+
+        svcs[svc] = usage
+
+    return svcs
+
+
 BLACK, RED, GREEN, YELLOW, BLUE, MAGENTA, CYAN, WHITE = [i+30 for i in range(8)]
 RESET_SEQ = "\033[0m"
 COLOR_SEQ = "\033[1;%dm"
@@ -153,7 +170,7 @@ def printstats(usage, stats):
     #print "Optimal would be %.2f." % (mopt)
     print "%.2fMB left for %d days" \
         % (stats['mleft'], stats['daysleft'])
-    print "Optimal this minute would be %.0f (actual %.0f)." \
+    print "Optimal this minute would be %.0fMB (actual %.0f)." \
         % (stats['dayopt'], usage['used'])
     print "Daily quota for remainder is %.0fMB." \
         % stats['leftquota']
@@ -163,6 +180,7 @@ def printstats(usage, stats):
         color = COLOR_SEQ % RED
     print "You are %.2fMB %s%s%s quota." \
         % (stats['moptdiff'], color, stats['moptstr'], RESET_SEQ)
+
 
 if __name__ == '__main__':
     opts = parseopts()
@@ -174,7 +192,7 @@ if __name__ == '__main__':
 
     (uname, passwd) = loadconfig()
 
-    usage = fetchusage(uname, passwd)
-    stats = calcstats(usage)
-
-    printstats(usage, stats)
+    usages = fetchusage(uname, passwd)
+    for u in usages.keys():
+        print "======== %s ========" % u
+        printstats(usages[u], calcstats(usages[u]))
