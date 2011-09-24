@@ -14,7 +14,7 @@
 #     password = XXXXX
 #
 
-import os, re, sys, time, optparse, logging, urllib
+import os, re, sys, time, optparse, logging, urllib2
 from ConfigParser import ConfigParser
 from urllib import FancyURLopener
 from xml.etree import ElementTree
@@ -102,26 +102,19 @@ def calcstats(usage):
     return stats
 
 
-class InodeURLOpener(FancyURLopener):
-    def __init__(self, uname, passwd):
-        FancyURLopener.__init__(self)
-        self.uname = uname
-        self.passwd = passwd
-
-    def prompt_user_passwd(self, host, realm):
-        return (self.uname, self.passwd)
-
-
 def fetchusage(uname, passwd):
-    url = InodeURLOpener(uname, passwd)
+    authhandler = urllib2.HTTPBasicAuthHandler()
+    authhandler.add_password(realm="internode-api", uri=TOOLURL, user=uname, passwd=passwd)
+    opener = urllib2.build_opener(authhandler)
+    urllib2.install_opener(opener)
 
     # Get service#
     logging.info("Fetching service list")
-    fd = url.open(TOOLURL)
+    fd = urllib2.urlopen(TOOLURL)
     et = ElementTree.parse(fd)
     logging.debug(ElementTree.tostring(et.getroot()))
     svcs = {}
-    for e in et.findall("//service"):
+    for e in et.findall(".//service"):
         svcs[e.attrib['type']] = e.text
     logging.info("Got %d services"%len(svcs))
     if len(svcs) <= 0:
@@ -130,12 +123,12 @@ def fetchusage(uname, passwd):
     # Get usage
     for svc in svcs.keys():
         logging.info("Fetching usage for %s"%svc)
-        fd = url.open(TOOLURL+"/"+svcs[svc]+"/usage")
+	fd = urllib2.urlopen(TOOLURL+"/"+svcs[svc]+"/usage")
         et = ElementTree.parse(fd)
         logging.debug(ElementTree.tostring(et.getroot()))
 
         # Current version of elementtree doesn't support attributes
-        traffics = et.findall("//traffic")
+        traffics = et.findall(".//traffic")
         for t in traffics:
             if t.attrib['name'] == 'total':
                 traffic = t
