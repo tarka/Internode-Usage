@@ -14,6 +14,7 @@
 #     password = XXXXX
 #
 
+from __future__ import print_function
 import os, re, sys, time, optparse, logging, urllib2
 from ConfigParser import ConfigParser
 from urllib import FancyURLopener
@@ -40,7 +41,7 @@ def parseopts():
 def loadconfig():
     config = ConfigParser()    
     if not os.path.exists(CONFFILE):
-        print "No config file defined.  See script header for details"
+        print("No config file defined.  See script header for details")
         sys.exit(-1)
 
     config.read(CONFFILE)
@@ -123,7 +124,7 @@ def fetchusage(uname, passwd):
     # Get usage
     for svc in svcs.keys():
         logging.info("Fetching usage for %s"%svc)
-	fd = urllib2.urlopen(TOOLURL+"/"+svcs[svc]+"/usage")
+        fd = urllib2.urlopen(TOOLURL+"/"+svcs[svc]+"/usage")
         et = ElementTree.parse(fd)
         logging.debug(ElementTree.tostring(et.getroot()))
 
@@ -155,24 +156,24 @@ COLOR_SEQ = "\033[1;%dm"
 BOLD_SEQ = "\033[1m"
 
 def printstats(usage, stats):
-    print "Completed %d days of %d, %d left (%.1f%% done)" \
+    print("Completed %d days of %d, %d left (%.1f%% done)" \
         % (stats['daysdone'], stats['daysdone']+stats['daysleft'], 
-           stats['daysleft'], stats['pcd'])
-    print "Used %.2f of %sMB (%.1f%%).  Daily quota is %.1fMB." \
-        % (usage['used'], usage['max'], stats['pcu'], stats['perday'])
+           stats['daysleft'], stats['pcd']))
+    print("Used %.2f of %sMB (%.1f%%).  Daily quota is %.1fMB." \
+        % (usage['used'], usage['max'], stats['pcu'], stats['perday']))
     #print "Optimal would be %.2f." % (mopt)
-    print "%.2fMB left for %d days" \
-        % (stats['mleft'], stats['daysleft'])
-    print "Optimal this minute would be %.0fMB (actual %.0f)." \
-        % (stats['dayopt'], usage['used'])
-    print "Daily quota for remainder is %.0fMB." \
-        % stats['leftquota']
+    print("%.2fMB left for %d days" \
+        % (stats['mleft'], stats['daysleft']))
+    print("Optimal this minute would be %.0fMB (actual %.0f)." \
+        % (stats['dayopt'], usage['used']))
+    print("Daily quota for remainder is %.0fMB." \
+        % stats['leftquota'])
     if (stats['moptstr'] == 'under'):
         color = COLOR_SEQ % GREEN
     else:
         color = COLOR_SEQ % RED
-    print "You are %.2fMB %s%s%s quota." \
-        % (stats['moptdiff'], color, stats['moptstr'], RESET_SEQ)
+    print("You are %.2fMB %s%s%s quota." \
+        % (stats['moptdiff'], color, stats['moptstr'], RESET_SEQ))
 
 
 if __name__ == '__main__':
@@ -187,5 +188,5 @@ if __name__ == '__main__':
 
     usages = fetchusage(uname, passwd)
     for u in usages.keys():
-        print "======== %s ========" % u
+        print("======== %s ========" % u)
         printstats(usages[u], calcstats(usages[u]))
