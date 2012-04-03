@@ -17,7 +17,6 @@
 from __future__ import print_function
 import os, re, sys, time, optparse, logging, urllib2
 from ConfigParser import ConfigParser
-from urllib import FancyURLopener
 from xml.etree import ElementTree
 
 
