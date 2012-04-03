@@ -15,9 +15,16 @@
 #
 
 from __future__ import print_function
-import os, re, sys, time, optparse, logging, urllib2
-from ConfigParser import ConfigParser
+import os, re, sys, time, optparse, logging
 from xml.etree import ElementTree
+
+# Check if we are running on Python 3 (copied from 'six' module)
+if sys.version_info[0] == 3:
+    from configparser import ConfigParser
+    from urllib.request import HTTPBasicAuthHandler, build_opener, install_opener, urlopen
+else:
+    from ConfigParser import ConfigParser
+    from urllib2 import HTTPBasicAuthHandler, build_opener, install_opener, urlopen
 
 
 CONFFILE = os.path.expanduser('~/.inoderc')
@@ -103,14 +110,14 @@ def calcstats(usage):
 
 
 def fetchusage(uname, passwd):
-    authhandler = urllib2.HTTPBasicAuthHandler()
+    authhandler = HTTPBasicAuthHandler()
     authhandler.add_password(realm="internode-api", uri=TOOLURL, user=uname, passwd=passwd)
-    opener = urllib2.build_opener(authhandler)
-    urllib2.install_opener(opener)
+    opener = build_opener(authhandler)
+    install_opener(opener)
 
     # Get service#
     logging.info("Fetching service list")
-    fd = urllib2.urlopen(TOOLURL)
+    fd = urlopen(TOOLURL)
     et = ElementTree.parse(fd)
     logging.debug(ElementTree.tostring(et.getroot()))
     svcs = {}
@@ -123,7 +130,7 @@ def fetchusage(uname, passwd):
     # Get usage
     for svc in svcs.keys():
         logging.info("Fetching usage for %s"%svc)
-        fd = urllib2.urlopen(TOOLURL+"/"+svcs[svc]+"/usage")
+        fd = urlopen(TOOLURL+"/"+svcs[svc]+"/usage")
         et = ElementTree.parse(fd)
         logging.debug(ElementTree.tostring(et.getroot()))
 
